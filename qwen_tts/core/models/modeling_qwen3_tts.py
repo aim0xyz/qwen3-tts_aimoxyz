@@ -719,6 +719,24 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, mrope_interle
             unsqueeze_dim
         )
 
+    # Debug Shapes for RuntimeError
+    if q.shape != cos.shape:
+        # Check broadcasting
+        try:
+            torch.broadcast_shapes(q.shape, cos.shape)
+        except RuntimeError:
+            print(f"[RoPE Error] Shape Mismatch! q={q.shape}, cos={cos.shape}, sin={sin.shape}")
+            print(f"[RoPE Error] mrope_section={mrope_section}, unsqueeze_dim={unsqueeze_dim}")
+
+    # Debug Shapes for RuntimeError
+    if q.shape != cos.shape:
+        # Check broadcasting
+        try:
+            torch.broadcast_shapes(q.shape, cos.shape)
+        except RuntimeError:
+            print(f"[RoPE Error] Shape Mismatch! q={q.shape}, cos={cos.shape}, sin={sin.shape}")
+            print(f"[RoPE Error] mrope_section={mrope_section}, unsqueeze_dim={unsqueeze_dim}")
+
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -1089,7 +1107,8 @@ class Qwen3TTSTalkerCodePredictorModel(Qwen3TTSPreTrainedModel):
             )
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            # Fix: Ensure position_ids are (3, Batch, SeqLen) for proper RoPE broadcasting
+            position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
@@ -1497,6 +1516,7 @@ class Qwen3TTSTalkerModel(Qwen3TTSTalkerTextPreTrainedModel):
 
         # the hard coded `3` is for temporal, height and width.
         if position_ids is None:
+            # Fix: Ensure position_ids are (3, Batch, SeqLen) for proper RoPE broadcasting
             position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
