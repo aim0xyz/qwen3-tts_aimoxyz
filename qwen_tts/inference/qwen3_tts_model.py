@@ -278,13 +278,11 @@ class Qwen3TTSModel:
     def _tokenize_texts(self, texts: List[str]) -> List[torch.Tensor]:
         input_ids = []
         for text in texts:
-            # Force padding to 1024 to stabilize input shapes for CUDA Graphs
-            # This enables reuse of the compiled graph without recompilation
+            # Allow dynamic padding for correct batch masking
             input = self.processor(
                 text=text, 
                 return_tensors="pt", 
-                padding="max_length", 
-                max_length=1024,
+                padding=True, # Dynamic per-call padding (effectively no-op for single str)
                 truncation=True
             )
             input_id = input["input_ids"].to(self.device)
