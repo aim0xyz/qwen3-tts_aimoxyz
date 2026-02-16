@@ -278,8 +278,17 @@ class Qwen3TTSModel:
     def _tokenize_texts(self, texts: List[str]) -> List[torch.Tensor]:
         input_ids = []
         for text in texts:
-            input = self.processor(text=text, return_tensors="pt", padding=True)
+            # Force padding to 1024 to stabilize input shapes for CUDA Graphs
+            # This enables reuse of the compiled graph without recompilation
+            input = self.processor(
+                text=text, 
+                return_tensors="pt", 
+                padding="max_length", 
+                max_length=1024,
+                truncation=True
+            )
             input_id = input["input_ids"].to(self.device)
+            # Ensure 2D [Batch, Seq]
             input_id = input_id.unsqueeze(0) if input_id.dim() == 1 else input_id
             input_ids.append(input_id)
         return input_ids
@@ -617,7 +626,15 @@ class Qwen3TTSModel:
             else:
                 codes_for_decode.append(codes)
 
-        wavs_all, fs = self.model.speech_tokenizer.decode([{"audio_codes": c} for c in codes_for_decode])
+        # Decode sequentially to avoid mask expansion errors in transformers/torch.compile during batched inference
+        # Main generation remains batched (fast), decoding is fast enough sequentially (~0.1s total)
+        wavs_all = []
+        fs = 48000 # default fallback
+        for c in codes_for_decode:
+             # Decode single item batch
+             w_batch, f_batch = self.model.speech_tokenizer.decode([{"audio_codes": c}])
+             wavs_all.append(w_batch[0])
+             fs = f_batch
 
         wavs_out: List[np.ndarray] = []
         for i, wav in enumerate(wavs_all):
