@@ -1406,7 +1406,7 @@ class Qwen3TTSTalkerDecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             **kwargs,
         )
-        hidden_states = residual + hidden_states
+        hidden_states = residual + hidden_states.clone()
 
         # Fully Connected
         residual = hidden_states
@@ -1414,7 +1414,7 @@ class Qwen3TTSTalkerDecoderLayer(GradientCheckpointingLayer):
 
         hidden_states = self.mlp(hidden_states)
 
-        hidden_states = residual + hidden_states
+        hidden_states = residual + hidden_states.clone()
 
         outputs = (hidden_states,)
 
